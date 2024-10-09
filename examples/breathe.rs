@@ -19,12 +19,14 @@ const BB_PWM_NUMBER: u32 = 0;
 fn pwm_increase_to_max(pwm: &Pwm,
                        duration_ms: u32,
                        update_period_ms: u32) -> Result<()> {
-    let step: f32 = duration_ms as f32 / update_period_ms as f32;
+    let num_steps: f32 = duration_ms as f32 / update_period_ms as f32;
+    let step = 1.0 / num_steps;
     let mut duty_cycle = 0.0;
-    let period_ns: u32 = try!(pwm.get_period_ns());
+    let period_ns: u32 = pwm.get_period_ns()?;
     while duty_cycle < 1.0 {
-        try!(pwm.set_duty_cycle_ns((duty_cycle * period_ns as f32) as u32));
+        pwm.set_duty_cycle_ns((duty_cycle * period_ns as f32) as u32)?;
         duty_cycle += step;
+        std::thread::sleep(std::time::Duration::from_millis(update_period_ms as u64))
     }
     pwm.set_duty_cycle_ns(period_ns)
 }
@@ -32,12 +34,14 @@ fn pwm_increase_to_max(pwm: &Pwm,
 fn pwm_decrease_to_minimum(pwm: &Pwm,
                            duration_ms: u32,
                            update_period_ms: u32) -> Result<()> {
-    let step: f32 = duration_ms as f32 / update_period_ms as f32;
+    let num_steps: f32 = duration_ms as f32 / update_period_ms as f32;
+    let step = 1.0 / num_steps;
     let mut duty_cycle = 1.0;
-    let period_ns: u32 = try!(pwm.get_period_ns());
+    let period_ns: u32 = pwm.get_period_ns()?;
     while duty_cycle > 0.0 {
-        try!(pwm.set_duty_cycle_ns((duty_cycle * period_ns as f32) as u32));
+        pwm.set_duty_cycle_ns((duty_cycle * period_ns as f32) as u32)?;
         duty_cycle -= step;
+        std::thread::sleep(std::time::Duration::from_millis(update_period_ms as u64))
     }
     pwm.set_duty_cycle_ns(0)
 }
