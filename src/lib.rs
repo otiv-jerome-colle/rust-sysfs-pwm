@@ -15,7 +15,6 @@
 //! PWM access under Linux using the PWM sysfs interface
 
 use std::io::prelude::*;
-use std::os::unix::prelude::*;
 use std::fs::File;
 use std::fs;
 use std::fs::OpenOptions;
