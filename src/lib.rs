@@ -14,10 +14,11 @@
 
 //! PWM access under Linux using the PWM sysfs interface
 
-use std::io::prelude::*;
-use std::fs::File;
+use std::ffi::OsStr;
 use std::fs;
+use std::fs::File;
 use std::fs::OpenOptions;
+use std::io::prelude::*;
 use std::str::FromStr;
 
 mod error;
@@ -44,17 +45,19 @@ pub type Result<T> = ::std::result::Result<T, error::Error>;
 
 /// Open the specified entry name as a writable file
 fn pwm_file_wo(chip: &PwmChip, pin: u32, name: &str) -> Result<File> {
-    let f = OpenOptions::new().write(true)
-        .open(format!("/sys/class/pwm/pwmchip{}/pwm{}/{}",
-                      chip.number,
-                      pin,
-                      name))?;
+    let f = OpenOptions::new().write(true).open(format!(
+        "/sys/class/pwm/pwmchip{}/pwm{}/{}",
+        chip.number, pin, name
+    ))?;
     Ok(f)
 }
 
 /// Open the specified entry name as a readable file
 fn pwm_file_ro(chip: &PwmChip, pin: u32, name: &str) -> Result<File> {
-    let f = File::open(format!("/sys/class/pwm/pwmchip{}/pwm{}/{}", chip.number, pin, name))?;
+    let f = File::open(format!(
+        "/sys/class/pwm/pwmchip{}/pwm{}/{}",
+        chip.number, pin, name
+    ))?;
     Ok(f)
 }
 
@@ -65,15 +68,24 @@ fn pwm_file_parse<T: FromStr>(chip: &PwmChip, pin: u32, name: &str) -> Result<T>
     f.read_to_string(&mut s)?;
     match s.trim().parse::<T>() {
         Ok(r) => Ok(r),
-        Err(_) => Err(Error::Unexpected(format!("Unexpeted value file contents: {:?}", s))),
+        Err(_) => Err(Error::Unexpected(format!(
+            "Unexpeted value file contents: {:?}",
+            s
+        ))),
     }
 }
-
 
 impl PwmChip {
     pub fn new(number: u32) -> Result<PwmChip> {
         fs::metadata(format!("/sys/class/pwm/pwmchip{}", number))?;
         Ok(PwmChip { number })
+    }
+
+    pub fn new_by_name(name: &str) -> Result<PwmChip> {
+        let pwmchip_number = Self::get_pwm_number_by_name(name).unwrap_or_else(|| panic!("Couldn't find PWM chip with name {}", name));
+        Ok(Self {
+            number: pwmchip_number,
+        })
     }
 
     pub fn count(&self) -> Result<u32> {
@@ -83,15 +95,21 @@ impl PwmChip {
         npwm_file.read_to_string(&mut s)?;
         match s.parse::<u32>() {
             Ok(n) => Ok(n),
-            Err(_) => Err(Error::Unexpected(format!("Unexpected npwm contents: {:?}", s))),
+            Err(_) => Err(Error::Unexpected(format!(
+                "Unexpected npwm contents: {:?}",
+                s
+            ))),
         }
     }
 
     pub fn export(&self, number: u32) -> Result<()> {
         // only export if not already exported
-        if fs::metadata(format!("/sys/class/pwm/pwmchip{}/pwm{}",
-                                              self.number,
-                                              number)).is_err() {
+        if fs::metadata(format!(
+            "/sys/class/pwm/pwmchip{}/pwm{}",
+            self.number, number
+        ))
+        .is_err()
+        {
             let path = format!("/sys/class/pwm/pwmchip{}/export", self.number);
             let mut export_file = File::create(&path)?;
             let _ = export_file.write_all(format!("{}", number).as_bytes());
@@ -100,14 +118,38 @@ impl PwmChip {
     }
 
     pub fn unexport(&self, number: u32) -> Result<()> {
-        if fs::metadata(format!("/sys/class/pwm/pwmchip{}/pwm{}",
-                                             self.number,
-                                             number)).is_ok() {
+        if fs::metadata(format!(
+            "/sys/class/pwm/pwmchip{}/pwm{}",
+            self.number, number
+        ))
+        .is_ok()
+        {
             let path = format!("/sys/class/pwm/pwmchip{}/unexport", self.number);
             let mut export_file = File::create(&path)?;
             let _ = export_file.write_all(format!("{}", number).as_bytes());
         }
         Ok(())
+    }
+
+    fn get_pwm_number_by_name(name: &str) -> Option<u32> {
+        fs::read_dir("/sys/class/pwm/")
+            .ok()?
+            .flatten()
+            .filter(|dir| dir.metadata().unwrap().is_symlink())
+            .filter_map(|dir| fs::read_link(dir.path()).ok().map(|path| (dir, path)))
+            .find_map(|(dir, path)| {
+                {
+                    path.ancestors()
+                        .find(|ancestor| ancestor.file_name() == Some(OsStr::new(name)))
+                }
+                .and_then(|_| {
+                    dir.file_name()
+                        .into_string()
+                        .ok()?
+                        .strip_prefix("pwmchip")
+                        .and_then(|chip_str| chip_str.parse::<u32>().ok())
+                })
+            })
     }
 }
 
@@ -117,16 +159,19 @@ impl Pwm {
     /// This function does not export the Pwm pin
     pub fn new(chip: u32, number: u32) -> Result<Pwm> {
         let chip: PwmChip = PwmChip::new(chip)?;
-        Ok(Pwm {
-            chip,
-            number,
-        })
+        Ok(Pwm { chip, number })
+    }
+
+    pub fn new_by_name(name: &str, number: u32) -> Result<Pwm> {
+        let chip = PwmChip::new_by_name(name)?;
+        Ok(Self { chip, number })
     }
 
     /// Run a closure with the GPIO exported
     #[inline]
     pub fn with_exported<F>(&self, closure: F) -> Result<()>
-        where F: FnOnce() -> Result<()>
+    where
+        F: FnOnce() -> Result<()>,
     {
         self.export()?;
         match closure() {
@@ -148,11 +193,7 @@ impl Pwm {
     /// Enable/Disable the PWM Signal
     pub fn enable(&self, enable: bool) -> Result<()> {
         let mut enable_file = pwm_file_wo(&self.chip, self.number, "enable")?;
-        let contents = if enable {
-            "1"
-        } else {
-            "0"
-        };
+        let contents = if enable { "1" } else { "0" };
         enable_file.write_all(contents.as_bytes())?;
         Ok(())
     }
