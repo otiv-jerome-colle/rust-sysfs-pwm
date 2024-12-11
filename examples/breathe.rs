@@ -10,38 +10,40 @@
 // https://github.com/npryce/rusty-pi/blob/master/src/pi/gpio.rs
 
 extern crate sysfs_pwm;
+
+use std::time::Duration;
 use sysfs_pwm::{Pwm, Result};
 
 // PIN: EHRPWM0A (P9_22)
 const BB_PWM_CHIP: u32 = 0;
 const BB_PWM_NUMBER: u32 = 0;
 
-fn pwm_increase_to_max(pwm: &Pwm,
-                       duration_ms: u32,
-                       update_period_ms: u32) -> Result<()> {
-    let num_steps: f32 = duration_ms as f32 / update_period_ms as f32;
+fn pwm_increase_to_maximum(pwm: &Pwm,
+                           pattern_duration: Duration,
+                           update_period: Duration) -> Result<()> {
+    let num_steps: f32 = pattern_duration.div_duration_f32(update_period);
     let step = 1.0 / num_steps;
     let mut duty_cycle = 0.0;
     let period_ns: u32 = pwm.get_period_ns()?;
     while duty_cycle < 1.0 {
         pwm.set_duty_cycle_ns((duty_cycle * period_ns as f32) as u32)?;
         duty_cycle += step;
-        std::thread::sleep(std::time::Duration::from_millis(update_period_ms as u64))
+        std::thread::sleep(update_period)
     }
     pwm.set_duty_cycle_ns(period_ns)
 }
 
 fn pwm_decrease_to_minimum(pwm: &Pwm,
-                           duration_ms: u32,
-                           update_period_ms: u32) -> Result<()> {
-    let num_steps: f32 = duration_ms as f32 / update_period_ms as f32;
+                           pattern_duration: Duration,
+                           update_period: Duration) -> Result<()> {
+    let num_steps: f32 = pattern_duration.div_duration_f32(update_period);
     let step = 1.0 / num_steps;
     let mut duty_cycle = 1.0;
     let period_ns: u32 = pwm.get_period_ns()?;
     while duty_cycle > 0.0 {
         pwm.set_duty_cycle_ns((duty_cycle * period_ns as f32) as u32)?;
         duty_cycle -= step;
-        std::thread::sleep(std::time::Duration::from_millis(update_period_ms as u64))
+        std::thread::sleep(update_period)
     }
     pwm.set_duty_cycle_ns(0)
 }
@@ -54,8 +56,8 @@ fn main() {
         pwm.enable(true).unwrap();
         pwm.set_period_ns(20_000).unwrap();
         loop {
-            pwm_increase_to_max(&pwm, 1000, 20).unwrap();
-            pwm_decrease_to_minimum(&pwm, 1000, 20).unwrap();
+            pwm_increase_to_maximum(&pwm, Duration::from_millis(1000), Duration::from_millis(20)).unwrap();
+            pwm_decrease_to_minimum(&pwm, Duration::from_millis(1000), Duration::from_millis(20)).unwrap();
         }
     }).unwrap();
 }

@@ -69,7 +69,7 @@ fn pwm_file_parse<T: FromStr>(chip: &PwmChip, pin: u32, name: &str) -> Result<T>
     match s.trim().parse::<T>() {
         Ok(r) => Ok(r),
         Err(_) => Err(Error::Unexpected(format!(
-            "Unexpeted value file contents: {:?}",
+            "Unexpected value file contents: {:?}",
             s
         ))),
     }
@@ -82,7 +82,9 @@ impl PwmChip {
     }
 
     pub fn new_by_name(name: &str) -> Result<PwmChip> {
-        let pwmchip_number = Self::get_pwm_number_by_name(name).unwrap_or_else(|| panic!("Couldn't find PWM chip with name {}", name));
+        let pwmchip_number = Self::get_pwm_number_by_name(name).ok_or(Error::Unexpected(
+            format!("Could not find pwmchip number for name: {:?}", name),
+        ))?;
         Ok(Self {
             number: pwmchip_number,
         })
@@ -91,13 +93,13 @@ impl PwmChip {
     pub fn count(&self) -> Result<u32> {
         let npwm_path = format!("/sys/class/pwm/pwmchip{}/npwm", self.number);
         let mut npwm_file = File::open(&npwm_path)?;
-        let mut s = String::new();
-        npwm_file.read_to_string(&mut s)?;
-        match s.parse::<u32>() {
+        let mut file_contents = String::new();
+        npwm_file.read_to_string(&mut file_contents)?;
+        match file_contents.parse::<u32>() {
             Ok(n) => Ok(n),
             Err(_) => Err(Error::Unexpected(format!(
                 "Unexpected npwm contents: {:?}",
-                s
+                file_contents
             ))),
         }
     }
@@ -154,7 +156,7 @@ impl PwmChip {
 }
 
 impl Pwm {
-    /// Create a new Pwm wiht the provided chip/number
+    /// Create a new Pwm with the provided chip/number
     ///
     /// This function does not export the Pwm pin
     pub fn new(chip: u32, number: u32) -> Result<Pwm> {
