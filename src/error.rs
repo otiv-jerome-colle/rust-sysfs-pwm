@@ -9,7 +9,6 @@
 // Portions of this implementation are based on work by Nat Pryce:
 // https://github.com/npryce/rusty-pi/blob/master/src/pi/gpio.rs
 
-use std::convert;
 use std::fmt;
 use std::io;
 
@@ -21,7 +20,7 @@ pub enum Error {
     Unexpected(String),
 }
 
-impl ::std::error::Error for Error {
+impl std::error::Error for Error {
     fn cause(&self) -> Option<&dyn (::std::error::Error)> {
         match *self {
             Error::Io(ref e) => Some(e),
@@ -40,7 +39,7 @@ impl fmt::Display for Error {
 }
 
 
-impl convert::From<io::Error> for Error {
+impl From<io::Error> for Error {
     fn from(e: io::Error) -> Error {
         Error::Io(e)
     }

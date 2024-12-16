@@ -41,7 +41,7 @@ pub enum Polarity {
     Inverse,
 }
 
-pub type Result<T> = ::std::result::Result<T, error::Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Open the specified entry name as a writable file
 fn pwm_file_wo(chip: &PwmChip, pin: u32, name: &str) -> Result<File> {
